@@ -1,0 +1,60 @@
+# Python and local tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+
+# VCoTD feature caches and checkpoints
+teacher_features/
+saves/
+*.pth
+
+# Local FSDrive/Qwen weights and generated model artifacts. Keep model/*.py.
+model/FSDrive_*/
+model/lora_*/
+model/predict_*/
+model/*.zip
+model/*.ckpt
+model/*.log
+
+# MoVQGAN weights and generated images
+MoVQGAN/270M/
+MoVQGAN/*.ckpt
+MoVQGAN/pics/
+
+# nuScenes and generated LLaMA-Factory artifacts
+LLaMA-Factory/data/nuscenes
+LLaMA-Factory/data/nuscenes_hdd/
+LLaMA-Factory/data/nuScenes-*/
+LLaMA-Factory/data/*.tgz
+LLaMA-Factory/data/*.tar.gz
+LLaMA-Factory/data/*_cot_motion*.json
+LLaMA-Factory/data/*_traj_only.json
+LLaMA-Factory/saves/
+LLaMA-Factory/output/
+create_data/*.pkl
+tools/data/metrics/*.pkl
+
+# Local logs and temporary outputs
+*.log
+tmp/
+
+# Generated evaluation, visualization, and structured-planning artifacts
+artifacts/
+outputs/
+vis_traj/
+vis_traj_ref/
+vis_vcotd/
+results*.json
+benchmark_results.json
+
+# Generated VQ indices and LLaMA-Factory inference outputs
+MoVQGAN/gt_indices_*.json
+LLaMA-Factory/results*/
+LLaMA-Factory/*.jsonl
+LLaMA-Factory/.env.local
+LLaMA-Factory/*.egg-info/
+MoVQGAN/*.egg-info/
+LLaMA-Factory/evaluation/**/*.zip

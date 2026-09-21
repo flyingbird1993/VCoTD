@@ -1,0 +1,31 @@
+### model
+model_name_or_path: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/FSDrive_pretrain
+adapter_name_or_path: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/lora_traj_5ep
+image_resolution: 65536
+trust_remote_code: true
+
+flash_attn: fa2
+
+### method
+stage: sft
+do_predict: true
+finetuning_type: lora
+
+### dataset
+eval_dataset: val_traj_only
+image_dir: /home/flyingbird/Work/AutoDriver/FSDrive-main/LLaMA-Factory
+template: qwen2_vl
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/predict_lora_traj_5ep
+overwrite_output_dir: true
+
+### eval
+per_device_eval_batch_size: 4
+predict_with_generate: true
+max_new_tokens: 128
+ddp_timeout: 180000000
+skip_special_tokens: true

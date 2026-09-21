@@ -1,0 +1,7 @@
+base: baseline_base.yaml
+experiment: B4_vision_history_command
+output_dir: outputs/planning_reasoner/b4_full
+model:
+  use_visual: true
+  use_history: true
+  use_command: true

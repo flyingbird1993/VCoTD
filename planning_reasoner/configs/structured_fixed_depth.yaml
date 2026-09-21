@@ -1,0 +1,67 @@
+experiment: structured_fixed_depth
+seed: 20260720
+max_stage: future
+output_dir: outputs/planning_reasoner/structured_fixed_depth
+
+data:
+  cache: create_data/cached_nuscenes_info.pkl
+  split_file: create_data/full_split.json
+  validation_ground_truth: tools/data/metrics/gt_traj.pkl
+  validation_masks: tools/data/metrics/gt_traj_mask.pkl
+  road_targets: artifacts/planning_reasoner/road_targets_64x64.pkl
+  train_feature_root: /media/flyingbird/07419DF8D71B0526/Dataset/nuScenes/derived/planning_reasoner/pooled_features/train
+  validation_feature_root: /media/flyingbird/07419DF8D71B0526/Dataset/nuScenes/derived/planning_reasoner/pooled_features/val
+  feature_key: deep
+  camera_count: 6
+  source_grid: [8, 8]
+  target_grid: [8, 8]
+  t_obs: 6
+  t_pred: 6
+  max_agents: 20
+  occupancy_grid: [8, 8]
+  occupancy_bounds: [-30.0, 30.0, -10.0, 50.0]
+
+model:
+  visual_dim: 1280
+  position_dim: 3
+  model_dim: 256
+  t_obs: 6
+  t_pred: 6
+  max_visual_tokens: 384
+  num_heads: 4
+  ffn_dim: 1024
+  context_layers: 2
+  stage_layers: 1
+  dropout: 0.1
+  road_channels: 1
+  road_height: 8
+  road_width: 8
+  agent_queries: 20
+  agent_classes: 10
+  future_height: 8
+  future_width: 8
+
+loss:
+  trajectory_objective: smooth_l1
+  smooth_l1_beta: 1.0
+  road_trajectory_weight: 0.3
+  interaction_trajectory_weight: 0.5
+  future_trajectory_weight: 1.0
+  road_map_weight: 0.5
+  interaction_weight: 0.02
+  future_occupancy_weight: 0.5
+  dice_weight: 1.0
+  agent_class_weight: 1.0
+  agent_center_weight: 2.0
+  agent_velocity_weight: 0.5
+  agent_future_weight: 1.0
+  matching_class_cost: 1.0
+  matching_center_cost: 2.0
+
+training:
+  epochs: 20
+  batch_size: 32
+  workers: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  gradient_clip_norm: 1.0

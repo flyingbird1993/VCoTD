@@ -1,0 +1,9 @@
+base: structured_fixed_depth.yaml
+experiment: structured_residual_b2
+output_dir: outputs/planning_reasoner/structured_residual_b2
+model:
+  use_motion_prior: true
+  zero_initialize_residual: true
+initialization:
+  motion_prior_checkpoint: outputs/planning_reasoner/b2_history_command/best.pt
+  freeze_motion_prior: true

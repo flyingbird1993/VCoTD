@@ -1,0 +1,50 @@
+### model
+model_name_or_path: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/FSDrive_pretrain
+adapter_name_or_path: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/lora_traj
+image_resolution: 65536
+trust_remote_code: true
+
+flash_attn: fa2
+enable_liger_kernel: false
+use_unsloth_gc: false
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+lora_target: all
+
+freeze_vision_tower: true
+freeze_multi_modal_projector: false
+
+### dataset
+dataset: train_traj_only
+image_dir: /home/flyingbird/Work/AutoDriver/FSDrive-main/LLaMA-Factory
+template: qwen2_vl
+cutoff_len: 4096
+max_new_tokens: 128
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/lora_traj_5ep
+logging_steps: 10
+save_steps: 200
+plot_loss: true
+overwrite_output_dir: true
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 4
+learning_rate: 2.0e-4
+num_train_epochs: 4.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+bf16: true
+ddp_timeout: 180000000
+gradient_checkpointing: true
+
+skip_special_tokens: false

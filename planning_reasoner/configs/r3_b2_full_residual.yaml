@@ -1,0 +1,4 @@
+base: structured_residual_b2.yaml
+experiment: R3_b2_full_residual
+max_stage: future
+output_dir: outputs/planning_reasoner/r3_b2_full_residual

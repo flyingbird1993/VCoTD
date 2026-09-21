@@ -1,0 +1,7 @@
+base: baseline_base.yaml
+experiment: B1_history
+output_dir: outputs/planning_reasoner/b1_history
+model:
+  use_visual: false
+  use_history: true
+  use_command: false

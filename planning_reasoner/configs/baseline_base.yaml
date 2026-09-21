@@ -1,0 +1,42 @@
+experiment: baseline_base
+seed: 20260720
+output_dir: outputs/planning_reasoner/baseline_base
+
+data:
+  cache: create_data/cached_nuscenes_info.pkl
+  split_file: create_data/full_split.json
+  validation_ground_truth: tools/data/metrics/gt_traj.pkl
+  validation_masks: tools/data/metrics/gt_traj_mask.pkl
+  train_feature_root: /media/flyingbird/07419DF8D71B0526/Dataset/nuScenes/derived/planning_reasoner/pooled_features/train
+  validation_feature_root: /media/flyingbird/07419DF8D71B0526/Dataset/nuScenes/derived/planning_reasoner/pooled_features/val
+  feature_key: deep
+  camera_count: 6
+  source_grid: [8, 8]
+  target_grid: [8, 8]
+  t_obs: 6
+  t_pred: 6
+
+model:
+  visual_dim: 1280
+  model_dim: 256
+  horizon: 6
+  max_history: 12
+  max_visual_tokens: 384
+  position_dim: 3
+  num_layers: 2
+  num_heads: 4
+  ffn_dim: 1024
+  dropout: 0.1
+  use_visual: true
+  use_history: true
+  use_command: true
+
+training:
+  epochs: 20
+  batch_size: 64
+  workers: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  gradient_clip_norm: 1.0
+  trajectory_loss: smooth_l1
+  smooth_l1_beta: 1.0

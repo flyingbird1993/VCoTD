@@ -1,0 +1,11 @@
+base: structured_residual_b2.yaml
+experiment: R1_b2_road_residual
+max_stage: road
+output_dir: outputs/planning_reasoner/r1_b2_road_residual
+loss:
+  road_trajectory_weight: 1.0
+  interaction_trajectory_weight: 0.0
+  future_trajectory_weight: 0.0
+  road_map_weight: 0.5
+  interaction_weight: 0.0
+  future_occupancy_weight: 0.0

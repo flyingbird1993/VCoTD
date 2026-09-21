@@ -1,0 +1,50 @@
+### model
+model_name_or_path: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/FSDrive_pretrain
+image_resolution: 131072
+video_resolution: 16384
+trust_remote_code: true
+
+enable_liger_kernel: false
+use_unsloth_gc: false
+flash_attn: fa2
+
+### method
+stage: sft
+do_train: true
+finetuning_type: full
+freeze_vision_tower: true
+freeze_multi_modal_projector: true
+deepspeed: examples/deepspeed/ds_z2_offload_config.json
+
+### dataset
+dataset: train_cot_motion
+template: qwen2_vl
+cutoff_len: 8192
+max_new_tokens: 2048
+max_samples: 500
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### output
+output_dir: /home/flyingbird/Work/AutoDriver/FSDrive-main/model/FSDrive_sft_verify
+logging_steps: 5
+save_steps: 100
+plot_loss: true
+overwrite_output_dir: true
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+gradient_checkpointing: true
+
+temperature: 0.1
+top_p: 0.1
+top_k: 10
+
+skip_special_tokens: false

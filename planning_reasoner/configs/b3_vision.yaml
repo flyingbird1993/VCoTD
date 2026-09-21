@@ -1,0 +1,7 @@
+base: baseline_base.yaml
+experiment: B3_vision
+output_dir: outputs/planning_reasoner/b3_vision
+model:
+  use_visual: true
+  use_history: false
+  use_command: false

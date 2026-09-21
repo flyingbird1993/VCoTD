@@ -1,0 +1,4 @@
+base: structured_fixed_depth.yaml
+experiment: S3_road_interaction_future
+max_stage: future
+output_dir: outputs/planning_reasoner/s3_road_interaction_future
