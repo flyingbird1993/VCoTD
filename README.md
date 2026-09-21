@@ -1,201 +1,292 @@
 # VCoTD
 
-VCoTD is a lightweight visual chain-of-thought trajectory planner based on
-progressive feature distillation. It transfers multi-level Qwen2-VL visual
-features into a compact four-layer Transformer, replacing FSDrive's
-autoregressive future-image generation with parallel waypoint prediction.
+**Lightweight Visual Chain-of-Thought for Autonomous Driving Planning via Progressive Feature Distillation**
 
-The paper-aligned implementation, commands, ablations, evaluation protocol,
-checkpoint compatibility notes, and current reproducibility limits are in
-[README_VCoTD.md](README_VCoTD.md).
+[![Paper](https://img.shields.io/badge/Neurocomputing-under%20review-blue)](https://github.com/flyingbird1993/VCoTD)
+[![Code](https://img.shields.io/badge/Code-GitHub-black?logo=github)](https://github.com/flyingbird1993/VCoTD)
+[![Dataset](https://img.shields.io/badge/Dataset-nuScenes-green)](https://www.nuscenes.org/nuscenes)
 
-This repository vendors the FSDrive baseline and its required source
-dependencies for research reproducibility. Model weights, nuScenes data,
-teacher-feature caches, checkpoints, and generated outputs are deliberately
-excluded from version control.
+VCoTD is a lightweight visual chain-of-thought (CoT) planner for end-to-end autonomous driving. Visual CoT can expose explicit future-scene evidence, but pixel-level autoregressive generation is too slow for practical inference. VCoTD keeps the spatial evidence of visual CoT and removes that bottleneck by transferring teacher knowledge in **feature space**.
 
-## FSDrive Baseline
+A frozen Qwen2-VL encoder extracts multi-view visual features. A compact four-layer Transformer then predicts a future-scene representation and decodes **six future waypoints in one parallel forward pass**. The pretrained FSDrive/Qwen2-VL pipeline is used only as a teacher for offline feature distillation; the generative future-image decoder is not used at test time.
 
-<div align="center">
-<a id="readme-top"></a>
-<h1> <img src="assets/logo.png" style="vertical-align: -10px;" :height="50px" width="50px"> FutureSightDrive: Thinking Visually with Spatio-Temporal CoT for Autonomous Driving </h1>
-<h3 align="center"><strong>🎉🎉NeurIPS 2025 spotlight🎉🎉</strong></h3>
+<p align="center">
+  <img src="assets/overall_framework.png" width="100%" alt="VCoTD overall framework">
+</p>
+<p align="center"><em>Overall framework: offline teacher-feature extraction, hierarchical distillation training, and encoder + student inference.</em></p>
 
-<a href="https://arxiv.org/abs/2505.17685"><img src='https://img.shields.io/badge/arXiv-Paper-red?logo=arxiv&logoColor=white' alt='arXiv'></a>
-<a href='https://miv-xjtu.github.io/FSDrive.github.io'><img src='https://img.shields.io/badge/Project_Page-Website-green?logo=googlechrome&logoColor=white' alt='Project Page'></a>
+## Highlights
 
-Shuang Zeng<sup>1,2</sup>,
-[Xinyuan Chang](https://scholar.google.com.hk/citations?user=5OnPBVYAAAAJ&hl=zh-CN)<sup>1</sup>,
-Mengwei Xie<sup>1</sup>,
-Xinran Liu<sup>1</sup>,
-Yifan Bai<sup>2,3</sup>,
-Zheng Pan<sup>1</sup>,
-Mu Xu<sup>1</sup>,
-[Xing Wei](https://scholar.google.com.hk/citations?user=KNyC5EUAAAAJ&hl=zh-CN&oi=ao/)<sup>2</sup>,
+- **Feature-space visual CoT.** Replace sequential future-image generation with one compact feature-prediction pass, removing the dominant autoregressive bottleneck.
+- **Progressive hierarchical distillation.** Align teacher layers 8 / 16 / 24 with student layers 1 / 2 / 4 through global scene descriptors, normalized attention profiles, and deep feature representations.
+- **Training-only adaptive weighting.** A sample-dependent score scales distillation strength during training and is removed at inference, so it adds no test-time compute.
+- **Planning with much lower latency.** In the submitted Neurocomputing manuscript, VCoTD reports 0.57 m average L2 and 0.19% average collision rate on nuScenes val, with latency reduced from 1517 ms to 95 ms relative to FSDrive.
 
-<sup>1</sup>Amap, Alibaba Group,
-<sup>2</sup>Xi’an Jiaotong University,
-<sup>3</sup>DAMO Academy, Alibaba Group
+## Method
 
-**FutureSightDrive (FSDrive)**: The proposed spatio-temporal CoT enables end-to-end autonomous driving **VLA** to **think visually** about trajectory planning and unify visual generation and understanding with minimal data, advancing autonomous driving towards **visual reasoning** for the first time.
+VCoTD has three operating stages:
 
+1. **Offline extraction.** The pretrained teacher caches shallow, intermediate, and deep visual features from Qwen2-VL layers 8, 16, and 24.
+2. **Distillation training.** The student is trained with trajectory regression plus hierarchical feature alignment. Adaptive weighting changes only the training loss.
+3. **Inference.** One frozen visual-encoder pass produces the deep feature; the student predicts all waypoints in a single forward pass. Teacher caches, projection losses, and the complexity gate are not used.
 
-https://github.com/user-attachments/assets/a99a14a3-a892-4cbe-ac1f-66b777d9081b
+<p align="center">
+  <img src="assets/student_architecture.png" width="92%" alt="VCoTD student architecture">
+</p>
+<p align="center"><em>Student architecture: one pooled visual token and six ego-history tokens are encoded by a four-layer Transformer; layers 1, 2, and 4 provide training-time distillation features.</em></p>
 
-</div>
+The inference path is:
 
-## Table of Contents
-- [🛠️ Installation](#-Installation)
-- [📦 Data Preparation](#-Data-Preparation)
-- [🚀 Training](#-Training)
-- [🎯 Infer](#-Infer)
-- [📈 Evaluation](#-Evaluation)
-- [👀 Visualization](#-Visualization)
-- [📜 Citing](#-Citing)
-- [🙏 Acknowledgement](#-Acknowledgement)
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
+```text
+six surround-view images
+  -> frozen Qwen2-VL visual encoder
+  -> deep feature sequence
+  -> global average pooling + Linear(d_vlm, 256)
+  -> concatenate six ego-history tokens
+  -> four Transformer encoder layers
+  -> two-layer trajectory decoder
+  -> six future (x, y) waypoints
+```
 
-## 🛠️ Installation
+The training objective combines trajectory loss with three complementary distillation terms:
 
-Create the required environment through the following steps:
+```text
+L_global  : pooled shallow-feature alignment
+L_spatial : normalized token-energy profile alignment
+L_detail  : interpolated deep-feature alignment
+
+L_distill = 1.0 * L_global + 1.0 * L_spatial + 0.5 * L_detail
+alpha_i   = 0.3 + 0.7 * gamma_i
+L_total   = mean_i (L_pred_i + alpha_i * L_distill_i)
+```
+
+`L_pred` is the masked Euclidean waypoint loss. `gamma` is a learned training-time distillation-strength gate. The inference `predict()` path skips the gate and the distillation feature taps.
+
+### Manuscript-reported nuScenes results
+
+| Method | Avg. L2 (m) | Avg. collision | Latency |
+| --- | ---: | ---: | ---: |
+| FSDrive teacher | 0.58 | 0.21% | 1517 ms |
+| **VCoTD** | **0.57** | **0.19%** | **95 ms** |
+
+These numbers are reported in the submitted manuscript. The complete raw-image pipeline still includes the frozen visual encoder; the trainable student-side module is about 16M parameters.
+
+<p align="center">
+  <img src="assets/qualitative_results.png" width="100%" alt="VCoTD qualitative results">
+</p>
+<p align="center"><em>Qualitative comparison between a trajectory-only student and full VCoTD distillation on straight, stop, left-turn, and right-turn scenes.</em></p>
+
+## Code Framework
+
+```text
+VCoTD
+├── model/                          # paper student
+│   ├── vcotd_student.py            # hierarchical losses, adaptive gate, checkpoint IO
+│   ├── vcotd_student_e2e.py        # trajectory-only / e2e variant
+│   └── light_encoder.py
+├── create_data/
+│   ├── extract_teacher_features.py # cache teacher layers 8 / 16 / 24
+│   ├── full_split.json             # train / val token split
+│   └── cached_nuscenes_info.pkl    # download separately
+├── train_vcotd.py                  # single-GPU / DDP training
+├── run_train.sh                    # paper GAP training launcher
+├── run_vcotd_ablations.sh          # five paper ablations
+├── infer_vcotd.py                  # raw-image inference
+├── infer_vcotd_cached.py           # cached-feature diagnostic
+├── run_eval_only.py                # mask-aware L2 from a checkpoint
+├── vis_vcotd.py                    # trajectory visualization
+├── tests_vcotd/                    # unit tests for paper-critical behavior
+├── tools/evaluation/               # UniAD / ST-P3 planning metrics
+├── LLaMA-Factory/                  # vendored Qwen2-VL / FSDrive runtime
+└── MoVQGAN/                        # vendored FSDrive visual-token tools
+```
+
+`planning_reasoner/` is an independent research branch and is **not** used for the VCoTD paper commands below.
+
+## Getting Started
+
+### 1. Environment
 
 ```bash
-git clone https://github.com/MIV-XJTU/FSDrive.git && cd FSDrive
+git clone https://github.com/flyingbird1993/VCoTD.git
+cd VCoTD
 
-conda create -n FSDrive python=3.10 -y && conda activate FSDrive
+conda create -n vcotd python=3.10 -y
+conda activate vcotd
 
 # CUDA 12.4
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 
-cd LLaMA-Factory && pip install -e ".[metrics,deepspeed,liger-kernel,bitsandbytes]" --no-build-isolation
-
-cd .. && pip install -r requirements.txt
-```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
-
-## 📦 Data Preparation
-
-1、Download nuScenes
-
-Download the complete dataset from [nuScenes](https://www.nuscenes.org/nuscenes#download) and extract it to `./LLaMA-Factory/data/nuscenes`
-
-Or establish a soft connection：
-
-```bash
-ln -s /path/to/your/nuscenes LLaMA-Factory/data
-```
-
-We used pre-cached data from the nuScenes dataset. The data can be downloaded at [Google Drive](https://drive.google.com/file/d/1Pc3vKtNHwZVY2mB9xBOOKiMIMr4hJFj7/view?usp=drive_link). The file `cached_nuscenes_info.pkl` is located in the directory `./create_data`. The `metrics` folder is placed in the directory `./tools/data`.
-
-2、Extract visual tokens
-
-Separately extract the visual tokens of the front view from both the pre-trained and fine-tuned data, to facilitate supervised MLLM:
-
-```bash
-python MoVQGAN/pretrain_data.py
-python MoVQGAN/sft_data.py
-```
-
-3、Construct data
-
-Construct pre-training and fine-tuning data that conform to the LLaMA-Factory format respectively:
-
-```bash
-python create_data/pretrain_data.py
-python create_data/sft_data.py --split train # Change to "val" for constructing the validation set
-```
-
-Follow the [LLaMA-Factory tutorial](https://github.com/hiyouga/LLaMA-Factory/blob/main/data/README.md) and add the dataset information in the file `./LLaMA-Factory/data/dataset_info.json`.
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
-
-## 🚀 Training
-Enter the working directory of LLaMA-Factory:
-```bash
 cd LLaMA-Factory
-```
-
-1、Pre-train
-
-First, pre-train the VLM to activate its visual generation capabilities:
-```bash
-llamafactory-cli train ../configs/pretrain.yaml
-```
-
-2、SFT
-
-Then, based on the pre-trained parameters, fine-tune the VLM to think visually about trajectory planning:
-```bash
-llamafactory-cli train ../configs/sft.yaml
-```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
-
-## 🎯 Infer
-Run the following command in the LLaMA-Factory directory to infer test dataset:
-```bash
-python scripts/vllm_infer.py \ 
---model_name_or_path saves/qwen2_vl-2b/sft \
---dataset val_cot_motion \
---template qwen2_vl \
---cutoff_len 32768 \
---max_new_tokens 2048 \
---max_samples 100000 \
---image_resolution 524288 \
---save_name results.jsonl \
---temperature 0.1 \
---top_p 0.1 \
---top_k 10
-```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
-
-## 📈 Evaluation
-First, under the FSDrive directory, match the predicted results with the tokens to facilitate the evaluation:
-```bash
+pip install -e ".[metrics,deepspeed,liger-kernel,bitsandbytes]" --no-build-isolation
 cd ..
-
-python tools/match.py \
---pred_trajs_path ./LLaMA-Factory/results.jsonl \
---token_traj_path ./LLaMA-Factory/data/val_cot_motion.json
+pip install -r requirements.txt
 ```
 
-Then evaluate the L2 and collision rate indicators for the end-to-end trajectory planning:
+### 2. Data and teacher checkpoint
+
+VCoTD needs three external assets that are **not** stored in this repository:
+
+1. **nuScenes** from [nuscenes.org](https://www.nuscenes.org/nuscenes#download). Place or symlink it at `LLaMA-Factory/data/nuscenes`.
+2. **Cached nuScenes metadata** `cached_nuscenes_info.pkl` from the [FSDrive release](https://drive.google.com/file/d/1Pc3vKtNHwZVY2mB9xBOOKiMIMr4hJFj7/view?usp=drive_link). Put the pkl in `create_data/` and put the `metrics` folder in `tools/data/`.
+3. **Frozen FSDrive / Qwen2-VL checkpoint** at `model/FSDrive_pretrain/`.
+
+```bash
+ln -s /path/to/nuscenes LLaMA-Factory/data/nuscenes
+```
+
+The included `create_data/full_split.json` lists the train/val tokens used by this codebase.
+
+### 3. Extract teacher features
+
+Run once for each split. This step is offline and writes shallow / middle / deep tensors for distillation.
+
+```bash
+python create_data/extract_teacher_features.py \
+  --model_path model/FSDrive_pretrain \
+  --nuscenes_root LLaMA-Factory/data/nuscenes \
+  --split train \
+  --output_dir teacher_features \
+  --dtype bf16 \
+  --resume
+
+python create_data/extract_teacher_features.py \
+  --model_path model/FSDrive_pretrain \
+  --nuscenes_root LLaMA-Factory/data/nuscenes \
+  --split val \
+  --output_dir teacher_features \
+  --dtype bf16 \
+  --resume
+```
+
+### 4. Train
+
+Paper-aligned GAP student, single GPU:
+
+```bash
+python train_vcotd.py \
+  --mode distill \
+  --teacher_feat_dir teacher_features \
+  --output_dir saves/vcotd_paper_gap \
+  --visual_aggregation gap \
+  --vis_tokens 1 \
+  --epochs 12 \
+  --batch_size 64 \
+  --lr 1e-4
+```
+
+Two GPUs with global batch size 64:
+
+```bash
+torchrun --standalone --nproc_per_node=2 train_vcotd.py \
+  --mode distill \
+  --teacher_feat_dir teacher_features \
+  --output_dir saves/vcotd_paper_gap \
+  --visual_aggregation gap \
+  --vis_tokens 1 \
+  --epochs 12 \
+  --batch_size 32 \
+  --lr 1e-4
+```
+
+Optional tmux launcher:
+
+```bash
+bash run_train.sh
+bash run_train.sh --attach
+bash run_train.sh --resume
+```
+
+Five paper ablations (`no_distillation`, `global`, `global_spatial`, `hierarchical_fixed`, `full_adaptive`):
+
+```bash
+bash run_vcotd_ablations.sh all
+```
+
+### 5. Inference
+
+Raw-image path used in the manuscript. It still needs one frozen Qwen2-VL encoder pass, but no autoregressive future-image decoder:
+
+```bash
+python infer_vcotd.py \
+  --student_ckpt saves/vcotd_paper_gap/checkpoint_best.pt \
+  --teacher_model_path model/FSDrive_pretrain \
+  --nuscenes_root LLaMA-Factory/data/nuscenes \
+  --mode distill \
+  --split val \
+  --output_path results_vcotd_paper_gap.json
+```
+
+Cached-feature diagnostic (not teacher-free deployment):
+
+```bash
+python infer_vcotd_cached.py \
+  --ckpt saves/vcotd_paper_gap/checkpoint_best.pt \
+  --feat_dir teacher_features/val \
+  --split val \
+  --output_path results_vcotd_cached.json
+```
+
+### 6. Evaluation
+
+Fast mask-aware L2 from a checkpoint:
+
+```bash
+python run_eval_only.py \
+  --checkpoint saves/vcotd_paper_gap/checkpoint_best.pt \
+  --teacher_feat_dir teacher_features
+```
+
+Official planning metrics after exporting a result JSON:
+
 ```bash
 python tools/evaluation/evaluation.py \
-# Change to "stp3" and use the ST-P3 calculation method
---metric uniad \  
---result_file ./LLaMA-Factory/eval_traj.json
+  --metric stp3 \
+  --result_file results_vcotd_paper_gap.json \
+  --method VCoTD
 ```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
 
-## 👀 Visualization
-Use the following command under the FSDrive directory to visualize the trajectory:
+### 7. Visualization
+
 ```bash
-python tools/visualization/visualize_planning.py \
---pred-trajs-path ./LLaMA-Factory/results.jsonl \
---tokens-path ./LLaMA-Factory/eval_traj.json \  
---output-path ./vis_traj
+python vis_vcotd.py \
+  --result_file results_vcotd_paper_gap.json \
+  --split val \
+  --output vis_vcotd/traj_visualization.png
 ```
 
-Use the following command under the FSDrive directory to restore the visual tokens to the pixel space and visualize the CoT:
+### 8. Tests
+
 ```bash
-python ./MoVQGAN/vis.py \
---input_json ./LLaMA-Factory/eval_traj.json \
---output_dir ./vis_cot
+python -m unittest discover -s tests_vcotd -v
 ```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
 
+## What is not included
 
-## 📜 Citing
+This repository contains source code only. The following local artifacts are gitignored and must be prepared separately:
 
-If you find FSDrive is useful in your research or applications, please consider giving us a star 🌟 and citing it by the following BibTeX entry:
+- `model/FSDrive_pretrain/` teacher weights
+- `teacher_features/` cached teacher features
+- `saves/` training checkpoints
+- nuScenes images and FSDrive metric caches
 
+## Citation
+
+If you use VCoTD, please cite the submitted paper:
+
+```bibtex
+@article{shi2026vcotd,
+  title={Lightweight Visual Chain-of-Thought for Autonomous Driving Planning via Progressive Feature Distillation},
+  author={Shi, Tengfei and Zhou, Zhe and Mo, Hong and Li, Xiaoli and Wu, Yuxin and Wu, Zhongbo and Wu, Zhao and Li, Xuan and Zhou, Haiying},
+  journal={Neurocomputing},
+  year={2026},
+  note={Under review}
+}
 ```
+
+VCoTD builds on the FSDrive visual-CoT teacher. Please also cite:
+
+```bibtex
 @article{zeng2025futuresightdrive,
   title={FutureSightDrive: Thinking Visually with Spatio-Temporal CoT for Autonomous Driving},
   author={Zeng, Shuang and Chang, Xinyuan and Xie, Mengwei and Liu, Xinran and Bai, Yifan and Pan, Zheng and Xu, Mu and Wei, Xing},
@@ -203,11 +294,7 @@ If you find FSDrive is useful in your research or applications, please consider 
   year={2025}
 }
 ```
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
 
-## 🙏 Acknowledgement
-Our work is primarily based on the following codebases:[LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory), [MoVQGAN](https://github.com/ai-forever/MoVQGAN), [GPT-Driver](https://github.com/PointsCoder/GPT-Driver), [Agent-Driver](https://github.com/USC-GVL/Agent-Driver). We are sincerely grateful for their work.
+## Acknowledgement
 
-<p align="right"><a href="#readme-top"><img src=https://img.shields.io/badge/back%20to%20top-red?style=flat
-></a></p>
+This implementation uses the [FSDrive](https://github.com/MIV-XJTU/FSDrive) teacher stack and vendors [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) and [MoVQGAN](https://github.com/ai-forever/MoVQGAN) for reproducibility. We thank the authors of FSDrive, GPT-Driver, and Agent-Driver for their publicly released resources.
