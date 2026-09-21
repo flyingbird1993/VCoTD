@@ -261,14 +261,6 @@ python vis_vcotd.py \
 python -m unittest discover -s tests_vcotd -v
 ```
 
-## What is not included
-
-This repository contains source code only. The following local artifacts are gitignored and must be prepared separately:
-
-- `model/FSDrive_pretrain/` teacher weights
-- `teacher_features/` cached teacher features
-- `saves/` training checkpoints
-- nuScenes images and FSDrive metric caches
 
 ## Citation
 
@@ -278,7 +270,7 @@ If you use VCoTD, please cite the submitted paper:
 @article{shi2026vcotd,
   title={Lightweight Visual Chain-of-Thought for Autonomous Driving Planning via Progressive Feature Distillation},
   author={Shi, Tengfei and Zhou, Zhe and Mo, Hong and Li, Xiaoli and Wu, Yuxin and Wu, Zhongbo and Wu, Zhao and Li, Xuan and Zhou, Haiying},
-  journal={Neurocomputing},
+  journal={Neural Networks},
   year={2026},
   note={Under review}
 }
